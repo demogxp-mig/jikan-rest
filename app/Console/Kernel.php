@@ -3,6 +3,7 @@
 namespace App\Console;
 
 use App\Console\Commands\CacheRemove;
+use App\Console\Commands\ExportJsonSnapshot;
 use App\Console\Commands\Indexer;
 use Illuminate\Console\Scheduling\Schedule;
 use Laravel\Lumen\Console\Kernel as ConsoleKernel;
@@ -16,6 +17,7 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
         CacheRemove::class,
+        ExportJsonSnapshot::class,
         Indexer\CommonIndexer::class,
         Indexer\AnimeScheduleIndexer::class,
         Indexer\CurrentSeasonIndexer::class,
@@ -36,30 +38,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // Update Scheduled Anime and current season data daily
-        // since they're airing, they're more prone to
-        // have their information updated
-        $schedule->command('indexer:anime-schedule')
-            ->daily();
-
-        $schedule->command('indexer:anime-current-season')
-            ->daily();
-
-        // Update common indexes daily
-        $schedule->command('indexer:common')
-            ->daily();
-
-        $schedule->command('indexer:genres')
-            ->daily();
-
-        $schedule->command('indexer:producers')
-            ->daily();
-
-        $schedule->command('indexer:anime-sweep')
-            ->daily();
-
-        $schedule->command('indexer:manga-sweep')
-            ->daily();
-
+        $schedule->command('export:json')
+            ->weeklyOn(0, '02:00')
+            ->withoutOverlapping();
     }
 }

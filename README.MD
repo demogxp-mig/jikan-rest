@@ -1,4 +1,78 @@
-[![Jikan](https://i.imgur.com/ccx3pxo.png)](#jikan-rest-api-v4---unofficial-myanimelistnet-rest-api)
+[![Jikan](https://i.imgur.com/ccx3pxo.png)](#jikan-json-snapshot-exporter)
+
+# Jikan JSON snapshot exporter
+
+This project can scrape the complete discoverable MyAnimeList anime and manga catalogs into one local JSON file. It reuses Jikan's existing scraper and serializer directly; no web server or MongoDB instance is involved in an export.
+
+## Create a snapshot
+
+Install the PHP dependencies, create the normal `.env` file, and run:
+
+```bash
+composer install
+cp .env.dist .env
+php artisan export:json
+```
+
+The default output is `storage/app/exports/jikan.json`. Writes are streamed to a temporary file and promoted only after the export finishes, so an interrupted run leaves the previous downloadable snapshot intact.
+
+Useful options:
+
+```bash
+# Fast smoke test with ten records from each dataset and no request delay
+php artisan export:json --limit=10 --delay=0
+
+# Export just anime to a public/download directory
+php artisan export:json --types=anime --output=public/downloads/jikan.json
+
+# Use checked-in or pre-downloaded ID lists instead of downloading them
+php artisan export:json --ids-dir=storage/app/id-lists
+```
+
+An ID-list directory must contain `anime.json` and/or `manga.json`. Each file may be a flat JSON array or the `{"sfw": [...], "nsfw": [...]}` format used by [mal-id-cache](https://github.com/purarue/mal-id-cache). By default the exporter downloads those lists itself.
+
+The snapshot has a stable top-level envelope:
+
+```json
+{
+  "metadata": {
+    "schema_version": 1,
+    "generated_at": "2026-08-09T00:00:00+00:00",
+    "datasets": ["anime", "manga"]
+  },
+  "data": {
+    "anime": [],
+    "manga": []
+  },
+  "summary": {
+    "exported": {"anime": 0, "manga": 0},
+    "failed": 0
+  },
+  "errors": []
+}
+```
+
+Individual scrape failures are listed in `errors`; successful records are still published. Add `--fail-on-error` when a scheduler should treat any skipped record as a failed run. The default three-second delay is intentionally conservative. A full first export is large and can take multiple days, so run it on a machine whose scheduler allows long jobs. A weekly cron entry is:
+
+```cron
+0 2 * * 0 cd /path/to/jikan-rest && php artisan export:json --output=/path/to/downloads/jikan.json >> storage/logs/export.log 2>&1
+```
+
+The built-in Laravel schedule also runs `export:json` at 02:00 each Sunday (UTC with the supplied environment). If you use it, invoke `php artisan schedule:run` from cron each minute as usual. The supplied file cache lets the overlap guard prevent a second export from starting while one is still running.
+
+## GitHub Actions publishing
+
+The `Weekly JSON snapshot` workflow installs PHP and Composer dependencies, runs the exporter, validates the result, and commits `exports/jikan.json` back to the repository through Git LFS. It runs every Sunday at 02:00 UTC and can also be started manually with configurable dataset and delay inputs.
+
+The full scrape is intentionally assigned to a self-hosted Linux x64 runner with the custom `jikan-export` label. A complete rate-limited catalog scrape can exceed the six-hour limit of a GitHub-hosted job. Install Git LFS on that runner and add the `jikan-export` label when registering it.
+
+Create a repository secret named `JSON_SNAPSHOT_TOKEN` containing a fine-grained personal access token with Contents read/write access to this repository. This is required because the automatic `GITHUB_TOKEN` expires after 24 hours, while a complete export may run longer. The token must also be allowed to update the default branch under its branch-protection rules.
+
+The exporter currently covers anime and manga because those are the datasets for which the existing application has complete bulk ID discovery. User-specific and transient endpoint data (for example users, reviews, news, and forum posts) is intentionally not included in the global snapshot.
+
+## Legacy REST API
+
+The existing REST implementation remains in the repository for compatibility, but it is not used by `export:json` and does not need to be hosted to create snapshots.
 
 # Jikan REST API v4 - Unofficial MyAnimeList.net REST API
 [![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/jikan-me/jikan-rest.svg)](http://isitmaintained.com/project/jikan-me/jikan-rest "Average time to resolve an issue") [![Percentage of issues still open](http://isitmaintained.com/badge/open/jikan-me/jikan-rest.svg)](http://isitmaintained.com/project/jikan-me/jikan-rest "Percentage of issues still open") [![stable](https://img.shields.io/badge/PHP-^8.1-blue.svg?style=flat)]() [![Discord Server](https://img.shields.io/discord/460491088004907029.svg?style=flat&logo=discord)](http://discord.jikan.moe)
