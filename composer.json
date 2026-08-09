@@ -37,7 +37,7 @@
         "sentry/sentry-laravel": "^2.8",
         "spatie/laravel-data": "^3.11",
         "spatie/laravel-enum": "^3.0",
-        "symfony/yaml": "^4.1",
+        "symfony/yaml": "^5.4",
         "typesense/laravel-scout-typesense-driver": "^5.2",
         "vlucas/phpdotenv": "^5",
         "zircote/swagger-php": "3.*"
