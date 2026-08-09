@@ -4,6 +4,7 @@ Artisan commands are run in the root of the project directory where the `artisan
 For an entire list of commands, you can run `php artisan list`
 
 ## Index
+- [JSON Snapshot](#json-snapshot)
 - [Serve](#serve)
 - [Queue](#queue)
     - [Clear](#queue-clear)
@@ -17,6 +18,24 @@ For an entire list of commands, you can run `php artisan list`
     - [Incremental](#indexer-incremental)
 
 ## Commands
+
+### JSON Snapshot
+
+Command:
+
+```
+export:json
+    {--types=anime,manga : Comma-separated datasets to export}
+    {--output=storage/app/exports/jikan.json : Snapshot file path}
+    {--ids-dir= : Directory containing anime.json and manga.json ID lists}
+    {--delay=3 : Seconds to wait between MyAnimeList requests}
+    {--limit=0 : Limit each dataset (useful for smoke tests)}
+    {--fail-on-error : Return a failure status if any record cannot be scraped}
+```
+
+Example: `php artisan export:json --limit=10 --delay=0`
+
+This command invokes the anime and manga scrapers directly and streams their results into one JSON snapshot. It does not call the REST API and does not require a running web server or database. The output is replaced only after a complete export, and individual scrape errors are included in the file.
 
 ### Serve
 Command: `serve`

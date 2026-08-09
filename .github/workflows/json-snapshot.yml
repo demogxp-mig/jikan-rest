@@ -1,0 +1,123 @@
+name: Weekly JSON snapshot
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      delay:
+        description: Seconds between MyAnimeList requests
+        required: true
+        default: "3"
+        type: string
+      types:
+        description: Comma-separated datasets to export
+        required: true
+        default: anime,manga
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-json-snapshot
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Scrape and publish snapshot
+    runs-on: [self-hosted, linux, x64, jikan-export]
+    timeout-minutes: 7140
+    env:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: "base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+      APP_TIMEZONE: UTC
+      CACHE_DRIVER: file
+      CACHING: "false"
+      DB_CACHING: "false"
+      GITHUB_REPORTING: "false"
+      REPORTING: "false"
+      SCOUT_DRIVER: none
+      SOURCE_TIMEOUT: "30"
+
+    steps:
+      - name: Check out repository and snapshot
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Verify publishing token
+        shell: bash
+        env:
+          PUBLISH_TOKEN: ${{ secrets.JSON_SNAPSHOT_TOKEN }}
+        run: |
+          if [[ -z "$PUBLISH_TOKEN" ]]; then
+            echo "The JSON_SNAPSHOT_TOKEN repository secret is required." >&2
+            exit 1
+          fi
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.1"
+          extensions: curl, intl, json, mbstring, mongodb, pcntl
+          coverage: none
+          tools: composer:v2
+
+      - name: Read Composer cache directory
+        id: composer-cache
+        shell: bash
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Scrape MyAnimeList into JSON
+        shell: bash
+        env:
+          EXPORT_DELAY: ${{ inputs.delay || '3' }}
+          EXPORT_TYPES: ${{ inputs.types || 'anime,manga' }}
+        run: >-
+          php artisan export:json
+          --types="$EXPORT_TYPES"
+          --delay="$EXPORT_DELAY"
+          --output=exports/jikan.json
+          --fail-on-error
+
+      - name: Validate generated JSON
+        shell: bash
+        run: php -r 'json_decode(file_get_contents("exports/jikan.json"), true, 512, JSON_THROW_ON_ERROR);'
+
+      - name: Commit and push snapshot
+        shell: bash
+        env:
+          PUBLISH_TOKEN: ${{ secrets.JSON_SNAPSHOT_TOKEN }}
+          TARGET_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git lfs install --local
+          trap 'git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"' EXIT
+          git remote set-url origin "https://x-access-token:${PUBLISH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git add exports/jikan.json
+
+          if git diff --cached --quiet; then
+            echo "Snapshot is unchanged; nothing to commit."
+            exit 0
+          fi
+
+          git commit -m "data: update weekly Jikan snapshot"
+          git fetch origin "$TARGET_BRANCH"
+          git rebase "origin/$TARGET_BRANCH"
+          git push origin "HEAD:${TARGET_BRANCH}"
